@@ -10,16 +10,34 @@ show a monthly availability overview and create one Outlook-compatible .ics
 file containing a one-hour, one-day-reminder event for each medication.
 
 .NOTES
+Script Name:   Meds-Calculator.ps1
+Author:        KNail
+Website:       https://www.my02dcents.com/
+Version:       1.0
+Creation Date: 2026-11-22
+Last Updated:  2026-11-22
+Purpose:       Estimate medication supply and prepare refill reminders.
+
+This software is free to use and is provided "AS IS", without warranties of
+any kind, express or implied, including merchantability, fitness for a
+particular purpose, and noninfringement. Use it at your own risk. To the
+extent permitted by law, the author is not liable for any claims, damages,
+or losses arising from its use, including incorrect estimates, data loss,
+or injury.
+
 Supply estimates are measured at the start of the selected date. The daily
 schedule supports 1-4 doses per day. Weekly means one dose every seven days,
 starting on the fill-date weekday. This tool does not account for missed doses,
 as-needed use, dose changes, partial fills, or other irregular schedules.
-Verify estimates and refill instructions with a qualified healthcare
-professional.
+It is not medical advice and does not replace prescription instructions.
+Verify estimates and refill instructions with a qualified healthcare professional.
 
 .EXAMPLE
 .\Meds-Calculator.ps1
 Launches the medication supply calculator.
+
+.LINK
+https://www.my02dcents.com/
 #>
 
 Add-Type -AssemblyName System.Windows.Forms

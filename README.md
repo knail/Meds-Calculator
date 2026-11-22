@@ -1,8 +1,18 @@
 # Medication Supply Calculator
 
+**Author:** KNail  
+**Website:** [my02dcents.com](https://www.my02dcents.com/)  
+**Version:** 1.0  
+**Creation date:** 2026-11-22  
+**Last updated:** 2026-11-22
+
 A Windows desktop tool for estimating medication supply, checking remaining quantities on a shared date, viewing a monthly availability calendar, and preparing refill reminders for Outlook or another iCalendar-compatible calendar.
 
 > **Important:** This is an estimate based on the information entered. It is not medical advice and does not replace prescription instructions. Confirm refill timing and dosing with your pharmacist or healthcare professional.
+
+## Free use and disclaimer
+
+This software is free to use and is provided **"AS IS"**, without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, and noninfringement. Use it at your own risk. To the extent permitted by law, the author is not liable for any claims, damages, or losses arising from its use, including incorrect estimates, data loss, or injury.
 
 ## Features
 
@@ -118,5 +128,5 @@ The script begins with PowerShell comment-based help, followed by foldable secti
 In PowerShell, the script help can be viewed with:
 
 ```powershell
-Get-Help .\Meds-Calculator.ps1 -Detailed
+Get-Help .\Meds-Calculator.ps1 -Full
 ```
