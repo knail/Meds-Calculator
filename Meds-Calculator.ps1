@@ -6,8 +6,8 @@ Estimates medication supply and creates refill calendar appointments.
 Medication Supply Calculator is a Windows Forms application for tracking up to
 10 medications. It estimates remaining quantities and refill dates from each
 medication's fill date, quantity, and daily or weekly schedule. It can also
-show a monthly availability overview and create one Outlook-compatible .ics
-file containing a one-hour, one-day-reminder event for each medication.
+show a monthly availability overview and create Outlook-compatible .ics files
+with one one-hour, one-day-reminder event per refill date.
 
 .NOTES
 Script Name:   Meds-Calculator.ps1
@@ -48,45 +48,58 @@ Add-Type -AssemblyName System.Drawing
 $Script:MaxMedicationCount = 10
 $Script:MedicationEntries = [System.Collections.Generic.List[System.Object]]::new()
 $Script:CurrentMedicationResults = @()
-$Script:ThemePrimary = [System.Drawing.Color]::FromArgb(0, 101, 108)
-$Script:ThemePrimaryHover = [System.Drawing.Color]::FromArgb(0, 81, 88)
+$Script:ThemePrimary = [System.Drawing.Color]::FromArgb(0, 100, 75)
+$Script:ThemeBanner = [System.Drawing.Color]::FromArgb(170, 90, 0)
+$Script:ThemeBannerHover = [System.Drawing.Color]::FromArgb(136, 72, 0)
 $Script:ThemeAccent = [System.Drawing.Color]::FromArgb(0, 108, 115)
 $Script:ThemeText = [System.Drawing.Color]::FromArgb(43, 52, 59)
 $Script:ThemeMutedText = [System.Drawing.Color]::FromArgb(91, 105, 112)
 $Script:ThemeBackground = [System.Drawing.Color]::FromArgb(238, 242, 244)
 $Script:ThemeSurface = [System.Drawing.Color]::FromArgb(255, 255, 255)
 $Script:ThemeSurfaceAlt = [System.Drawing.Color]::FromArgb(247, 249, 250)
-$Script:ThemeInput = [System.Drawing.Color]::FromArgb(250, 251, 252)
+$Script:ThemeInput = [System.Drawing.Color]::FromArgb(242, 248, 244)
 $Script:ThemeBorder = [System.Drawing.Color]::FromArgb(192, 203, 208)
 $Script:ThemeHoverSurface = [System.Drawing.Color]::FromArgb(231, 241, 242)
-$Script:ThemeNeutral = [System.Drawing.Color]::FromArgb(229, 234, 237)
 $Script:ThemeGreen = [System.Drawing.Color]::FromArgb(226, 243, 232)
 $Script:ThemeGreenText = [System.Drawing.Color]::FromArgb(37, 105, 66)
-$Script:ThemeRed = [System.Drawing.Color]::FromArgb(252, 231, 229)
 $Script:ThemeRedText = [System.Drawing.Color]::FromArgb(151, 59, 54)
-$availableFontNames = @([System.Drawing.FontFamily]::Families | ForEach-Object { $_.Name })
-$Script:UiFontFamily = if ($availableFontNames -contains 'Segoe UI Variable Text') {
-    'Segoe UI Variable Text'
-} elseif ($availableFontNames -contains 'Segoe UI Variable') {
-    'Segoe UI Variable'
-} elseif ($availableFontNames -contains 'Aptos') {
-    'Aptos'
-} elseif ($availableFontNames -contains 'Roboto') {
-    'Roboto'
-} else {
-    'Segoe UI'
-}
-$Script:DatePickerFont = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
+$Script:UiFontFamily = 'Segoe UI'
+$Script:DatePickerFont = New-Object System.Drawing.Font($Script:UiFontFamily, 10)
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Medication Calculator'
-$form.Size = New-Object System.Drawing.Size(760, 740)
+$form.Size = New-Object System.Drawing.Size(780, [Math]::Min(835, [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height))
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
+$form.AutoScroll = $true
+$form.AutoScrollMargin = New-Object System.Drawing.Size(0, 10)
 $form.Font = New-Object System.Drawing.Font($Script:UiFontFamily, 10)
 $form.BackColor = $Script:ThemeBackground
 $form.ForeColor = $Script:ThemeText
+
+$applicationIcon = $null
+# PS2EXE runs the embedded script without a script root.
+if ([string]::IsNullOrEmpty($PSScriptRoot))
+{
+    $applicationIcon = [System.Drawing.Icon]::ExtractAssociatedIcon([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+    if ($null -eq $applicationIcon)
+    {
+        throw 'Could not load the application icon from the executable.'
+    }
+}
+else
+{
+    $iconPath = Join-Path $PSScriptRoot 'Meds-Calculator.ico'
+    if (Test-Path -LiteralPath $iconPath -PathType Leaf)
+    {
+        $applicationIcon = New-Object System.Drawing.Icon($iconPath)
+    }
+}
+if ($null -ne $applicationIcon)
+{
+    $form.Icon = $applicationIcon
+}
 
 function New-SectionCard([string]$Title, [int]$X, [int]$Y, [int]$Width, [int]$Height) {
     $panel = New-Object System.Windows.Forms.Panel
@@ -101,7 +114,7 @@ function New-SectionCard([string]$Title, [int]$X, [int]$Y, [int]$Width, [int]$He
     $heading.Location = New-Object System.Drawing.Point(14, 7)
     $heading.Size = New-Object System.Drawing.Size(($Width - 28), 22)
     $heading.Font = New-Object System.Drawing.Font($Script:UiFontFamily, 10, [System.Drawing.FontStyle]::Bold)
-    $heading.ForeColor = $Script:ThemeAccent
+    $heading.ForeColor = [System.Drawing.Color]::Black
     $panel.Controls.Add($heading)
     $form.Controls.Add($panel)
     return $panel
@@ -116,17 +129,17 @@ function Add-FieldLabel([System.Windows.Forms.Control]$Parent, [string]$Text, [i
     $Parent.Controls.Add($label)
 }
 
-function Set-ButtonStyle([System.Windows.Forms.Button]$Button, [bool]$Primary = $false) {
+function Set-ButtonStyle([System.Windows.Forms.Button]$Button, [bool]$Primary = $false, [float]$FontSize = 10) {
     $Button.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
     $Button.UseVisualStyleBackColor = $false
     $Button.FlatAppearance.BorderSize = if ($Primary) { 0 } else { 1 }
     $Button.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $Button.Font = New-Object System.Drawing.Font($Script:UiFontFamily, 10, [System.Drawing.FontStyle]::Bold)
+    $Button.Font = New-Object System.Drawing.Font($Script:UiFontFamily, $FontSize, [System.Drawing.FontStyle]::Bold)
     if ($Primary)
     {
-        $Button.BackColor = $Script:ThemePrimary
+        $Button.BackColor = $Script:ThemeBanner
         $Button.ForeColor = [System.Drawing.Color]::White
-        $Button.FlatAppearance.MouseOverBackColor = $Script:ThemePrimaryHover
+        $Button.FlatAppearance.MouseOverBackColor = $Script:ThemeBannerHover
     }
     else
     {
@@ -142,8 +155,8 @@ function Set-ButtonStyle([System.Windows.Forms.Button]$Button, [bool]$Primary = 
 #region Main window and medication input controls
 $headerPanel = New-Object System.Windows.Forms.Panel
 $headerPanel.Location = New-Object System.Drawing.Point(0, 0)
-$headerPanel.Size = New-Object System.Drawing.Size(744, 70)
-$headerPanel.BackColor = $Script:ThemePrimary
+$headerPanel.Size = New-Object System.Drawing.Size(764, 70)
+$headerPanel.BackColor = $Script:ThemeBanner
 $headerPanel.ForeColor = $Script:ThemeText
 $form.Controls.Add($headerPanel)
 
@@ -159,7 +172,7 @@ $instructionLabel = New-Object System.Windows.Forms.Label
 $instructionLabel.Text = 'Add each medication, then check all supplies for one shared date.'
 $instructionLabel.Location = New-Object System.Drawing.Point(20, 40)
 $instructionLabel.Size = New-Object System.Drawing.Size(700, 21)
-$instructionLabel.ForeColor = [System.Drawing.Color]::FromArgb(205, 235, 235)
+$instructionLabel.ForeColor = [System.Drawing.Color]::White
 $headerPanel.Controls.Add($instructionLabel)
 
 $countPanel = New-Object System.Windows.Forms.Panel
@@ -188,11 +201,18 @@ $medicationCountInput.ForeColor = $Script:ThemeText
 $countPanel.Controls.Add($medicationCountInput)
 
 $countHint = New-Object System.Windows.Forms.Label
-$countHint.Text = "Choose 1-$($Script:MaxMedicationCount); entries below are saved when hidden."
+$countHint.Text = "Choose 1-$($Script:MaxMedicationCount)"
 $countHint.Location = New-Object System.Drawing.Point(265, 11)
-$countHint.Size = New-Object System.Drawing.Size(430, 22)
+$countHint.Size = New-Object System.Drawing.Size(90, 22)
 $countHint.ForeColor = $Script:ThemeMutedText
 $countPanel.Controls.Add($countHint)
+
+$copyFillDateButton = New-Object System.Windows.Forms.Button
+$copyFillDateButton.Text = 'Copy Med 1 Fill Date to All'
+$copyFillDateButton.Location = New-Object System.Drawing.Point(365, 6)
+$copyFillDateButton.Size = New-Object System.Drawing.Size(330, 30)
+Set-ButtonStyle -Button $copyFillDateButton -FontSize 9
+$countPanel.Controls.Add($copyFillDateButton)
 
 $medicationListPanel = New-Object System.Windows.Forms.FlowLayoutPanel
 $medicationListPanel.Location = New-Object System.Drawing.Point(16, 132)
@@ -207,6 +227,7 @@ $medicationListPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSing
 $form.Controls.Add($medicationListPanel)
 
 $medicationToolTip = New-Object System.Windows.Forms.ToolTip
+$medicationToolTip.SetToolTip($copyFillDateButton, 'Copies Medication 1''s fill date to the currently displayed medications. Hidden entries are unchanged.')
 
 function New-MedicationEntry([int]$Number) {
     $panel = New-Object System.Windows.Forms.Panel
@@ -217,11 +238,11 @@ function New-MedicationEntry([int]$Number) {
     $panel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
 
     $heading = New-Object System.Windows.Forms.Label
-    $heading.Text = "Medication $Number"
+    $heading.Text = "MEDICATION $Number"
     $heading.Location = New-Object System.Drawing.Point(10, 5)
     $heading.Size = New-Object System.Drawing.Size(650, 20)
-    $heading.Font = New-Object System.Drawing.Font($Script:UiFontFamily, 9, [System.Drawing.FontStyle]::Bold)
-    $heading.ForeColor = $Script:ThemeAccent
+    $heading.Font = New-Object System.Drawing.Font($Script:UiFontFamily, 10, ([System.Drawing.FontStyle]::Bold -bor [System.Drawing.FontStyle]::Underline))
+    $heading.ForeColor = [System.Drawing.Color]::Black
     $panel.Controls.Add($heading)
 
     Add-FieldLabel -Parent $panel -Text 'Name:' -X 12 -Y 30 -Width 100
@@ -256,20 +277,22 @@ function New-MedicationEntry([int]$Number) {
     $quantityInput.ForeColor = $Script:ThemeText
     $panel.Controls.Add($quantityInput)
 
-    Add-FieldLabel -Parent $panel -Text 'Doses taken:' -X 240 -Y 69 -Width 75
+    Add-FieldLabel -Parent $panel -Text 'Doses taken:' -X 230 -Y 69 -Width 90
     $dosesInput = New-Object System.Windows.Forms.NumericUpDown
     $dosesInput.Minimum = 1
     $dosesInput.Maximum = 4
     $dosesInput.Value = 1
-    $dosesInput.Location = New-Object System.Drawing.Point(315, 67)
+    $dosesInput.Location = New-Object System.Drawing.Point(325, 67)
     $dosesInput.Size = New-Object System.Drawing.Size(65, 25)
+    $dosesInput.BackColor = $Script:ThemeInput
+    $dosesInput.ForeColor = $Script:ThemeText
     $panel.Controls.Add($dosesInput)
 
     $frequencyBox = New-Object System.Windows.Forms.ComboBox
     $frequencyBox.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
     [void]$frequencyBox.Items.AddRange([object[]]@('Daily', 'Weekly'))
     $frequencyBox.SelectedIndex = 0
-    $frequencyBox.Location = New-Object System.Drawing.Point(390, 67)
+    $frequencyBox.Location = New-Object System.Drawing.Point(400, 67)
     $frequencyBox.Size = New-Object System.Drawing.Size(130, 25)
     $frequencyBox.BackColor = $Script:ThemeInput
     $frequencyBox.ForeColor = $Script:ThemeText
@@ -318,11 +341,14 @@ Sync-MedicationEntries
 #endregion
 
 #region Shared date, result, and action controls
-$sharedCard = New-SectionCard -Title 'Shared date and appointment time' -X 16 -Y 370 -Width 712 -Height 74
-Add-FieldLabel -Parent $sharedCard -Text 'Spot check date:' -X 12 -Y 36 -Width 110
+$sharedCard = New-SectionCard -Title 'Spot Check Date' -X 16 -Y 370 -Width 712 -Height 74
+$spotHeading = $sharedCard.Controls[0]
+$spotHeading.Location = New-Object System.Drawing.Point(170, 23)
+$spotHeading.Size = New-Object System.Drawing.Size(180, 28)
+$spotHeading.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
 $checkDatePicker = New-Object System.Windows.Forms.DateTimePicker
 $checkDatePicker.Format = 'Short'
-$checkDatePicker.Location = New-Object System.Drawing.Point(128, 33)
+$checkDatePicker.Location = New-Object System.Drawing.Point(360, 23)
 $checkDatePicker.AutoSize = $false
 $checkDatePicker.Size = New-Object System.Drawing.Size(180, 28)
 $checkDatePicker.Font = $Script:DatePickerFont
@@ -330,70 +356,104 @@ $checkDatePicker.CalendarMonthBackground = $Script:ThemeInput
 $checkDatePicker.CalendarForeColor = $Script:ThemeText
 $sharedCard.Controls.Add($checkDatePicker)
 
-Add-FieldLabel -Parent $sharedCard -Text 'Appointment time:' -X 320 -Y 36 -Width 125
+$calculateButton = New-Object System.Windows.Forms.Button
+$calculateButton.Text = 'Calculate All Medications'
+$calculateButton.Location = New-Object System.Drawing.Point(16, 454)
+$calculateButton.Size = New-Object System.Drawing.Size(712, 38)
+$calculateButton.TabIndex = 1
+Set-ButtonStyle -Button $calculateButton -Primary $true -FontSize 11
+$form.Controls.Add($calculateButton)
+$form.AcceptButton = $calculateButton
+
+$resultPanel = New-SectionCard -Title 'Remaining Quantity and Refill Date' -X 16 -Y 502 -Width 712 -Height 110
+$resultsList = New-Object System.Windows.Forms.ListView
+$resultsList.View = [System.Windows.Forms.View]::Details
+$resultsList.HeaderStyle = [System.Windows.Forms.ColumnHeaderStyle]::Nonclickable
+$resultsList.FullRowSelect = $true
+$resultsList.GridLines = $true
+$resultsList.ShowItemToolTips = $true
+$resultsList.BackColor = $Script:ThemeInput
+$resultsList.ForeColor = $Script:ThemeText
+$resultsList.Font = New-Object System.Drawing.Font($Script:UiFontFamily, 9)
+$resultsList.Location = New-Object System.Drawing.Point(14, 31)
+$resultsList.Size = New-Object System.Drawing.Size(680, 68)
+[void]$resultsList.Columns.Add('Med Name', 230)
+[void]$resultsList.Columns.Add('Qty on Spot Check Date', 245)
+[void]$resultsList.Columns.Add('Refill Date', 170)
+$resultPanel.Controls.Add($resultsList)
+
+$resultsHint = New-Object System.Windows.Forms.Label
+$resultsHint.Text = 'Enter medication details, then calculate to see each remaining quantity.'
+$resultsHint.Location = New-Object System.Drawing.Point(20, 54)
+$resultsHint.Size = New-Object System.Drawing.Size(640, 20)
+$resultsHint.BackColor = $Script:ThemeInput
+$resultsHint.ForeColor = $Script:ThemeText
+$resultsHint.Font = New-Object System.Drawing.Font($Script:UiFontFamily, 9)
+$resultPanel.Controls.Add($resultsHint)
+$resultsHint.BringToFront()
+
+$calendarButton = New-Object System.Windows.Forms.Button
+$calendarButton.Text = 'View Availability Calendar'
+$calendarButton.Location = New-Object System.Drawing.Point(16, 622)
+$calendarButton.Size = New-Object System.Drawing.Size(712, 36)
+$calendarButton.TabIndex = 2
+Set-ButtonStyle -Button $calendarButton -FontSize 11
+$calendarButton.BackColor = $Script:ThemeGreen
+$calendarButton.ForeColor = $Script:ThemeGreenText
+$calendarButton.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(207, 234, 215)
+$form.Controls.Add($calendarButton)
+
+$appointmentCard = New-SectionCard -Title 'Create Refill Appointments' -X 16 -Y 670 -Width 712 -Height 118
+Add-FieldLabel -Parent $appointmentCard -Text 'Days before refill:' -X 12 -Y 36 -Width 130
+$daysBeforeInput = New-Object System.Windows.Forms.NumericUpDown
+$daysBeforeInput.Minimum = 0
+$daysBeforeInput.Maximum = ([datetime]::MaxValue.Date - [datetime]::MinValue.Date).Days
+$daysBeforeInput.Value = 0
+$daysBeforeInput.Location = New-Object System.Drawing.Point(145, 33)
+$daysBeforeInput.Size = New-Object System.Drawing.Size(90, 26)
+$daysBeforeInput.BackColor = $Script:ThemeInput
+$daysBeforeInput.ForeColor = $Script:ThemeText
+$appointmentCard.Controls.Add($daysBeforeInput)
+
+Add-FieldLabel -Parent $appointmentCard -Text 'Appointment time:' -X 255 -Y 36 -Width 125
 $appointmentTimePicker = New-Object System.Windows.Forms.DateTimePicker
 $appointmentTimePicker.Format = [System.Windows.Forms.DateTimePickerFormat]::Time
 $appointmentTimePicker.ShowUpDown = $true
 $appointmentTimePicker.Value = (Get-Date).Date.AddHours(9)
-$appointmentTimePicker.Location = New-Object System.Drawing.Point(450, 33)
+$appointmentTimePicker.Location = New-Object System.Drawing.Point(383, 33)
 $appointmentTimePicker.AutoSize = $false
-$appointmentTimePicker.Size = New-Object System.Drawing.Size(140, 28)
+$appointmentTimePicker.Size = New-Object System.Drawing.Size(120, 28)
 $appointmentTimePicker.BackColor = $Script:ThemeInput
 $appointmentTimePicker.ForeColor = $Script:ThemeText
 $appointmentTimePicker.CalendarMonthBackground = $Script:ThemeInput
 $appointmentTimePicker.CalendarForeColor = $Script:ThemeText
-$sharedCard.Controls.Add($appointmentTimePicker)
+$appointmentCard.Controls.Add($appointmentTimePicker)
 
-$sharedHint = New-Object System.Windows.Forms.Label
-$sharedHint.Text = '1 hr; 1-day reminder'
-$sharedHint.Location = New-Object System.Drawing.Point(598, 36)
-$sharedHint.Size = New-Object System.Drawing.Size(102, 22)
-$sharedHint.Font = New-Object System.Drawing.Font($Script:UiFontFamily, 8)
-$sharedHint.ForeColor = $Script:ThemeMutedText
-$sharedCard.Controls.Add($sharedHint)
-
-$calculateButton = New-Object System.Windows.Forms.Button
-$calculateButton.Text = 'Calculate all medications'
-$calculateButton.Location = New-Object System.Drawing.Point(16, 454)
-$calculateButton.Size = New-Object System.Drawing.Size(712, 38)
-$calculateButton.TabIndex = 1
-Set-ButtonStyle -Button $calculateButton -Primary $true
-$form.Controls.Add($calculateButton)
-$form.AcceptButton = $calculateButton
-
-$resultPanel = New-SectionCard -Title 'Remaining quantity and refill date' -X 16 -Y 502 -Width 712 -Height 110
-$resultsTextBox = New-Object System.Windows.Forms.TextBox
-$resultsTextBox.Multiline = $true
-$resultsTextBox.ReadOnly = $true
-$resultsTextBox.WordWrap = $false
-$resultsTextBox.ScrollBars = [System.Windows.Forms.ScrollBars]::Both
-$resultsTextBox.BorderStyle = [System.Windows.Forms.BorderStyle]::None
-$resultsTextBox.BackColor = $Script:ThemeInput
-$resultsTextBox.ForeColor = $Script:ThemeText
-$resultsTextBox.Font = New-Object System.Drawing.Font($Script:UiFontFamily, 9)
-$resultsTextBox.Location = New-Object System.Drawing.Point(14, 31)
-$resultsTextBox.Size = New-Object System.Drawing.Size(680, 68)
-$resultsTextBox.Text = 'Enter medication details, then calculate to see each remaining quantity.'
-$resultPanel.Controls.Add($resultsTextBox)
+$appointmentDateHint = New-Object System.Windows.Forms.Label
+$appointmentDateHint.Text = '0 = refill day'
+$appointmentDateHint.Location = New-Object System.Drawing.Point(520, 36)
+$appointmentDateHint.Size = New-Object System.Drawing.Size(175, 22)
+$appointmentDateHint.ForeColor = $Script:ThemeMutedText
+$appointmentCard.Controls.Add($appointmentDateHint)
 
 $appointmentButton = New-Object System.Windows.Forms.Button
-$appointmentButton.Text = 'Create refill appointments (.ics)'
-$appointmentButton.Location = New-Object System.Drawing.Point(16, 622)
-$appointmentButton.Size = New-Object System.Drawing.Size(344, 36)
-$appointmentButton.TabIndex = 2
-Set-ButtonStyle -Button $appointmentButton
-$form.Controls.Add($appointmentButton)
+$appointmentButton.Text = 'Create Refill Appointments (.ics)'
+$appointmentButton.Location = New-Object System.Drawing.Point(12, 72)
+$appointmentButton.Size = New-Object System.Drawing.Size(430, 36)
+$appointmentButton.TabIndex = 3
+Set-ButtonStyle -Button $appointmentButton -FontSize 11
+$appointmentCard.Controls.Add($appointmentButton)
 
-$calendarButton = New-Object System.Windows.Forms.Button
-$calendarButton.Text = 'View availability calendar'
-$calendarButton.Location = New-Object System.Drawing.Point(384, 622)
-$calendarButton.Size = New-Object System.Drawing.Size(344, 36)
-$calendarButton.TabIndex = 3
-Set-ButtonStyle -Button $calendarButton
-$form.Controls.Add($calendarButton)
+$appointmentHint = New-Object System.Windows.Forms.Label
+$appointmentHint.Text = '1 hr; alert 1 day before appointment'
+$appointmentHint.Location = New-Object System.Drawing.Point(452, 79)
+$appointmentHint.Size = New-Object System.Drawing.Size(245, 22)
+$appointmentHint.Font = New-Object System.Drawing.Font($Script:UiFontFamily, 8)
+$appointmentHint.ForeColor = $Script:ThemeMutedText
+$appointmentCard.Controls.Add($appointmentHint)
 
 $appointmentToolTip = New-Object System.Windows.Forms.ToolTip
-$appointmentToolTip.SetToolTip($appointmentButton, 'Creates one one-hour Outlook appointment per medication, with a reminder one day before.')
+$appointmentToolTip.SetToolTip($appointmentButton, 'Creates one appointment file per refill date, with an alert one day before each appointment.')
 
 #endregion
 
@@ -446,20 +506,6 @@ function ConvertTo-IcsContentLine([string]$Line) {
     return $builder.ToString()
 }
 
-function Get-SafeFileName([string]$Name) {
-    foreach ($invalidCharacter in [System.IO.Path]::GetInvalidFileNameChars())
-    {
-        $Name = $Name.Replace([string]$invalidCharacter, '_')
-    }
-
-    $safeName = $Name.Trim().TrimEnd([char[]]@(' ', '.'))
-    if ([string]::IsNullOrWhiteSpace($safeName))
-    {
-        return 'Medication'
-    }
-    return $safeName
-}
-
 #endregion
 
 #region Medication result calculations
@@ -508,64 +554,66 @@ function Update-Result {
     $checkDate = $checkDatePicker.Value.Date
     $results = @(Get-MedicationResults -AsOfDate $checkDate)
     $Script:CurrentMedicationResults = $results
-    $resultsTextBox.Text = @(
+    $resultsHint.Visible = $false
+    $resultsList.BeginUpdate()
+    try
+    {
+        $resultsList.Columns[1].Text = 'Qty on ' + $checkDate.ToShortDateString()
+        $resultsList.Items.Clear()
         foreach ($medication in $results)
         {
-            $availability = if ($medication.HasStarted) { "$($medication.Remaining) remaining" } else { 'not filled yet' }
-            '{0} | {1} | Refill: {2}' -f $medication.Name, $availability, $medication.RefillDate.ToShortDateString()
+            $availability = if ($medication.HasStarted) { [string]$medication.Remaining } else { 'Not filled yet' }
+            $item = New-Object System.Windows.Forms.ListViewItem($medication.Name)
+            [void]$item.SubItems.Add($availability)
+            [void]$item.SubItems.Add($medication.RefillDate.ToShortDateString())
+            $item.ToolTipText = $medication.Name
+            [void]$resultsList.Items.Add($item)
         }
-    ) -join [Environment]::NewLine
+    }
+    finally
+    {
+        $resultsList.EndUpdate()
+    }
 }
 
 #endregion
 
 #region Monthly medication availability calendar
 function Get-CalendarDaySummary([datetime]$CalendarDate, [object[]]$Medications) {
-    $medicationLines = [System.Collections.Generic.List[string]]::new()
-    $filledCount = 0
-    $activeCount = 0
+    $medicationLines = [System.Collections.Generic.List[System.Object]]::new()
     foreach ($medication in $Medications)
     {
         if ($CalendarDate.Date -lt $medication.FillDate)
         {
             $availability = 'Not filled'
+            $status = 'NotFilled'
         }
         else
         {
-            $filledCount++
             $daysElapsed = ($CalendarDate.Date - $medication.FillDate).Days
             $remaining = Get-RemainingQuantity -Quantity $medication.Quantity -Doses $medication.Doses -Frequency $medication.Frequency -DaysElapsed $daysElapsed
-            if ($remaining -gt 0) { $activeCount++ }
             $availability = [string]$remaining
+            $status = if ($remaining -gt 0) { 'Active' } else { 'Depleted' }
         }
-        [void]$medicationLines.Add(('{0} | {1}' -f $medication.Name, $availability))
+        [void]$medicationLines.Add([PSCustomObject]@{
+            Text = ('{0} | {1}' -f $medication.Name, $availability)
+            Status = $status
+        })
     }
 
-    $status = if ($filledCount -eq 0) {
-        'NotFilled'
-    } elseif ($activeCount -gt 0) {
-        'Active'
-    } else {
-        'Depleted'
-    }
     return [PSCustomObject]@{
         Lines = $medicationLines.ToArray()
-        FilledCount = $filledCount
-        ActiveCount = $activeCount
-        Status = $status
     }
 }
 
 function Show-AvailabilityCalendar {
     $checkDate = $checkDatePicker.Value.Date
     $medications = @(Get-MedicationResults -AsOfDate $checkDate)
-    $uiFontFamily = $Script:UiFontFamily
     $themeMutedText = $Script:ThemeMutedText
-    $themeNeutral = $Script:ThemeNeutral
-    $themeGreen = $Script:ThemeGreen
     $themeGreenText = $Script:ThemeGreenText
-    $themeRed = $Script:ThemeRed
     $themeRedText = $Script:ThemeRedText
+    $themeText = $Script:ThemeText
+    $themeSurface = $Script:ThemeSurface
     $workingArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
     $calendarWidth = [Math]::Min(1280, $workingArea.Width)
     $calendarHeight = [Math]::Min(980, $workingArea.Height)
@@ -656,7 +704,7 @@ function Show-AvailabilityCalendar {
     $legend.Size = New-Object System.Drawing.Size($calendarGrid.Width, 50)
     $legend.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
     $legend.ForeColor = $Script:ThemeText
-    $legend.Text = "Each day lists Medication | remaining quantity (or Not filled) at the start of that date.`r`nGreen: at least one supply is active. Red: all filled supplies are empty. Gray: before the first fill date. The outlined date is the shared spot-check date."
+    $legend.Text = "Each day lists Medication | remaining quantity at the start of that date.`r`nGreen: supply available. Red: depleted. Gray: not filled yet. The outlined date is the shared spot-check date."
     $calendarForm.Controls.Add($legend)
 
     $calendarToolTip = New-Object System.Windows.Forms.ToolTip
@@ -682,43 +730,46 @@ function Show-AvailabilityCalendar {
         {
             $calendarDate = $firstVisibleDate.AddDays($dayOffset)
             $daySummary = Get-CalendarDaySummary -CalendarDate $calendarDate -Medications $medications
-            $medicationText = $daySummary.Lines -join "`r`n"
+            $medicationText = ($daySummary.Lines | ForEach-Object { $_.Text }) -join "`r`n"
+            $tooltipText = "$($calendarDate.ToLongDateString())`r`n$medicationText"
 
-            $cell = New-Object System.Windows.Forms.Label
+            $cell = New-Object System.Windows.Forms.Panel
             $cell.Dock = [System.Windows.Forms.DockStyle]::Fill
             $cell.Margin = New-Object System.Windows.Forms.Padding(1)
-            $cell.Padding = New-Object System.Windows.Forms.Padding(5)
-            $cell.TextAlign = [System.Drawing.ContentAlignment]::TopLeft
-            $cell.Font = New-Object System.Drawing.Font($uiFontFamily, 9)
-            $cell.AutoEllipsis = $true
-            $cell.Text = "$($calendarDate.Day)`r`n$medicationText"
-            $calendarToolTip.SetToolTip($cell, "$($calendarDate.ToLongDateString())`r`n$medicationText")
+            $cell.Padding = New-Object System.Windows.Forms.Padding(3)
+            $cell.BackColor = $themeSurface
+            $calendarToolTip.SetToolTip($cell, $tooltipText)
             $cell.BorderStyle = if ($calendarDate.Date -eq $checkDate) {
                 [System.Windows.Forms.BorderStyle]::Fixed3D
             } else {
                 [System.Windows.Forms.BorderStyle]::FixedSingle
             }
 
-            if ($daySummary.Status -eq 'NotFilled')
+            for ($lineIndex = $daySummary.Lines.Count - 1; $lineIndex -ge 0; $lineIndex--)
             {
-                $cell.BackColor = $themeNeutral
-                $cell.ForeColor = $themeMutedText
+                $line = $daySummary.Lines[$lineIndex]
+                $lineLabel = New-Object System.Windows.Forms.Label
+                $lineLabel.Dock = [System.Windows.Forms.DockStyle]::Top
+                $lineLabel.Height = 18
+                $lineLabel.AutoEllipsis = $true
+                $lineLabel.Text = $line.Text
+                $lineLabel.ForeColor = if ($line.Status -eq 'Active') {
+                    $themeGreenText
+                } elseif ($line.Status -eq 'Depleted') {
+                    $themeRedText
+                } else {
+                    $themeMutedText
+                }
+                $calendarToolTip.SetToolTip($lineLabel, $tooltipText)
+                $cell.Controls.Add($lineLabel)
             }
-            elseif ($daySummary.Status -eq 'Active')
-            {
-                $cell.BackColor = $themeGreen
-                $cell.ForeColor = $themeGreenText
-            }
-            else
-            {
-                $cell.BackColor = $themeRed
-                $cell.ForeColor = $themeRedText
-            }
-
-            if ($calendarDate.Month -ne $monthStart.Month -or $calendarDate.Year -ne $monthStart.Year)
-            {
-                $cell.ForeColor = $themeMutedText
-            }
+            $dayLabel = New-Object System.Windows.Forms.Label
+            $dayLabel.Dock = [System.Windows.Forms.DockStyle]::Top
+            $dayLabel.Height = 20
+            $dayLabel.Text = [string]$calendarDate.Day
+            $dayLabel.ForeColor = if ($calendarDate.Month -ne $monthStart.Month -or $calendarDate.Year -ne $monthStart.Year) { $themeMutedText } else { $themeText }
+            $calendarToolTip.SetToolTip($dayLabel, $tooltipText)
+            $cell.Controls.Add($dayLabel)
             $calendarGrid.Controls.Add($cell, $dayOffset % 7, ([int][Math]::Floor($dayOffset / 7) + 1))
         }
     }.GetNewClosure()
@@ -747,14 +798,31 @@ function Show-AvailabilityCalendar {
 #endregion
 
 #region iCalendar generation and application event handlers
-function New-IcsEventContent($Medication, [TimeSpan]$AppointmentTime) {
+function New-IcsEventContent([object[]]$Medications, [TimeSpan]$AppointmentTime, [int]$DaysBeforeRefill) {
+    if ($Medications.Count -eq 0)
+    {
+        throw 'At least one medication is required for an appointment.'
+    }
+    $refillDate = $Medications[0].RefillDate.Date
+    foreach ($medication in $Medications)
+    {
+        if ($medication.RefillDate.Date -ne $refillDate)
+        {
+            throw 'Medications in an appointment must have the same refill date.'
+        }
+    }
+    if ($DaysBeforeRefill -lt 0 -or $DaysBeforeRefill -gt ($refillDate - [datetime]::MinValue.Date).Days)
+    {
+        throw "The days-before value is outside the valid date range for refill date $($refillDate.ToShortDateString())."
+    }
+    $appointmentDate = $refillDate.AddDays(-$DaysBeforeRefill)
     $appointmentStartLocal = [DateTime]::SpecifyKind(
-        $Medication.RefillDate.Date.Add($AppointmentTime),
+        $appointmentDate.Add($AppointmentTime),
         [DateTimeKind]::Local
     )
     if ([System.TimeZoneInfo]::Local.IsInvalidTime($appointmentStartLocal))
     {
-        throw "The selected appointment time does not exist on $($Medication.RefillDate.ToShortDateString()) because of a daylight-saving time change."
+        throw "The selected appointment time does not exist on $($appointmentDate.ToShortDateString()) because of a daylight-saving time change."
     }
 
     $appointmentStartUtc = $appointmentStartLocal.ToUniversalTime()
@@ -764,8 +832,10 @@ function New-IcsEventContent($Medication, [TimeSpan]$AppointmentTime) {
     $endUtc = $appointmentEndUtc.ToString("yyyyMMdd'T'HHmmss'Z'", $invariantCulture)
     $stampUtc = [DateTime]::UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'", $invariantCulture)
     $uid = '{0}@meds-calculator' -f [guid]::NewGuid().ToString()
-    $escapedSummary = ConvertTo-IcsText -Text "$($Medication.Name) refill"
-    $escapedDescription = ConvertTo-IcsText -Text "Refill $($Medication.Name) medication supply."
+    $names = ($Medications | ForEach-Object { $_.Name }) -join ', '
+    $escapedSummary = ConvertTo-IcsText -Text "$names refill"
+    $refillDateText = $refillDate.ToString('yyyy-MM-dd', $invariantCulture)
+    $escapedDescription = ConvertTo-IcsText -Text "Refill $names medication supply. Refill date: $refillDateText."
     $eventLines = @(
         'BEGIN:VEVENT'
         "UID:$uid"
@@ -784,7 +854,7 @@ function New-IcsEventContent($Medication, [TimeSpan]$AppointmentTime) {
     return ($eventLines | ForEach-Object { ConvertTo-IcsContentLine -Line $_ }) -join "`r`n"
 }
 
-function New-IcsCalendarContent([object[]]$Medications, [TimeSpan]$AppointmentTime) {
+function New-IcsCalendarContent([object[]]$Medications, [TimeSpan]$AppointmentTime, [int]$DaysBeforeRefill) {
     $calendarLines = [System.Collections.Generic.List[string]]::new()
     foreach ($line in @(
         'BEGIN:VCALENDAR'
@@ -796,14 +866,33 @@ function New-IcsCalendarContent([object[]]$Medications, [TimeSpan]$AppointmentTi
     {
         [void]$calendarLines.Add($line)
     }
-    foreach ($medication in $Medications)
-    {
-        [void]$calendarLines.Add((New-IcsEventContent -Medication $medication -AppointmentTime $AppointmentTime))
-    }
+    [void]$calendarLines.Add((New-IcsEventContent -Medications $Medications -AppointmentTime $AppointmentTime -DaysBeforeRefill $DaysBeforeRefill))
     [void]$calendarLines.Add('END:VCALENDAR')
     return $calendarLines -join "`r`n"
 }
 
+function New-IcsAppointmentFiles([object[]]$Medications, [TimeSpan]$AppointmentTime, [int]$DaysBeforeRefill) {
+    $groups = @($Medications | Group-Object -Property { $_.RefillDate.Date.ToString('yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture) } | Sort-Object Name)
+    foreach ($group in $groups)
+    {
+        [PSCustomObject]@{
+            FileName = "Refills-$($group.Name).ics"
+            Content = New-IcsCalendarContent -Medications $group.Group -AppointmentTime $AppointmentTime -DaysBeforeRefill $DaysBeforeRefill
+        }
+    }
+}
+
+$copyFillDateButton.Add_Click({
+    $fillDate = $Script:MedicationEntries[0].FillDatePicker.Value.Date
+    for ($index = 1; $index -lt [int]$medicationCountInput.Value; $index++)
+    {
+        $Script:MedicationEntries[$index].FillDatePicker.Value = $fillDate
+    }
+    if ($Script:CurrentMedicationResults.Count -gt 0)
+    {
+        Update-Result
+    }
+})
 $calculateButton.Add_Click({ Update-Result })
 $calendarButton.Add_Click({ Show-AvailabilityCalendar })
 $appointmentButton.Add_Click({
@@ -811,7 +900,7 @@ $appointmentButton.Add_Click({
     $medications = @(Get-MedicationResults -AsOfDate $checkDatePicker.Value.Date)
     try
     {
-        $calendarContent = New-IcsCalendarContent -Medications $medications -AppointmentTime $appointmentTimePicker.Value.TimeOfDay
+        $calendarFiles = @(New-IcsAppointmentFiles -Medications $medications -AppointmentTime $appointmentTimePicker.Value.TimeOfDay -DaysBeforeRefill ([int]$daysBeforeInput.Value))
     }
     catch
     {
@@ -825,74 +914,93 @@ $appointmentButton.Add_Click({
         return
     }
 
-    $safeNames = @($medications | ForEach-Object { Get-SafeFileName -Name $_.Name })
-    $fileNameBase = Get-SafeFileName -Name ($safeNames -join '-')
-    if ($fileNameBase.Length -gt 120)
-    {
-        $fileNameBase = $fileNameBase.Substring(0, 120).TrimEnd([char[]]@(' ', '.'))
-    }
-    if ($medications.Count -eq 1)
-    {
-        $suggestedFileName = "$fileNameBase-Refill-$($medications[0].RefillDate.ToString('yyyy-MM-dd')).ics"
-    }
-    else
-    {
-        $suggestedFileName = "$fileNameBase-Refills.ics"
-    }
-
-    $dialog = New-Object System.Windows.Forms.SaveFileDialog
-    $dialog.Title = 'Save medication refill appointments'
-    $dialog.Filter = 'iCalendar file (*.ics)|*.ics'
-    $dialog.DefaultExt = 'ics'
-    $dialog.AddExtension = $true
-    $dialog.FileName = $suggestedFileName
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = 'Choose a folder for the medication refill appointment files.'
     $documentsPath = [Environment]::GetFolderPath('MyDocuments')
     if (-not [string]::IsNullOrWhiteSpace($documentsPath))
     {
-        $dialog.InitialDirectory = $documentsPath
+        $dialog.SelectedPath = $documentsPath
     }
 
-    $savedFilePath = $null
     try
     {
         if ($dialog.ShowDialog($form) -ne [System.Windows.Forms.DialogResult]::OK)
         {
             return
         }
-
-        $savedFilePath = $dialog.FileName
-        [System.IO.File]::WriteAllText(
-            $savedFilePath,
-            $calendarContent + "`r`n",
-            [System.Text.UTF8Encoding]::new($false)
-        )
-    }
-    catch
-    {
-        [void][System.Windows.Forms.MessageBox]::Show(
-            $form,
-            "Could not create the appointment file: $($_.Exception.Message)",
-            'Appointment file failed',
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Error
-        )
-        return
+        $destinationFolder = $dialog.SelectedPath
     }
     finally
     {
         $dialog.Dispose()
     }
 
+    $savedPaths = [System.Collections.Generic.List[string]]::new()
+    $currentPath = $null
     try
     {
-        Start-Process -FilePath $savedFilePath -ErrorAction Stop
+        foreach ($calendarFile in $calendarFiles)
+        {
+            $baseName = [System.IO.Path]::GetFileNameWithoutExtension($calendarFile.FileName)
+            $counter = 1
+            do
+            {
+                $suffix = if ($counter -gt 1) { "-$counter" } else { '' }
+                $currentPath = [System.IO.Path]::Combine($destinationFolder, "$baseName$suffix.ics")
+                $counter++
+            } while (Test-Path -LiteralPath $currentPath)
+
+            $stream = [System.IO.File]::Open($currentPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+            try
+            {
+                $writer = [System.IO.StreamWriter]::new($stream, [System.Text.UTF8Encoding]::new($false))
+                try
+                {
+                    $writer.Write($calendarFile.Content + "`r`n")
+                }
+                finally
+                {
+                    $writer.Dispose()
+                }
+            }
+            finally
+            {
+                $stream.Dispose()
+            }
+            [void]$savedPaths.Add($currentPath)
+        }
     }
     catch
     {
+        $savedDetails = if ($savedPaths.Count -gt 0) { $savedPaths -join "`r`n" } else { '(none)' }
         [void][System.Windows.Forms.MessageBox]::Show(
             $form,
-            "The appointment file was saved, but could not be opened automatically:`r`n$savedFilePath`r`n`r`n$($_.Exception.Message)",
-            'Appointment file saved',
+            "Could not create all appointment files: $($_.Exception.Message)`r`n`r`nLast attempted file (which may be incomplete):`r`n$currentPath`r`n`r`nFiles created so far:`r`n$savedDetails",
+            'Appointment files failed',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        )
+        return
+    }
+
+    $openErrors = [System.Collections.Generic.List[string]]::new()
+    foreach ($savedPath in $savedPaths)
+    {
+        try
+        {
+            Start-Process -FilePath $savedPath -ErrorAction Stop
+        }
+        catch
+        {
+            [void]$openErrors.Add("$savedPath`r`n$($_.Exception.Message)")
+        }
+    }
+    if ($openErrors.Count -gt 0)
+    {
+        [void][System.Windows.Forms.MessageBox]::Show(
+            $form,
+            "The files were saved, but these could not be opened automatically:`r`n`r`n$($openErrors -join "`r`n`r`n")",
+            'Appointment files saved',
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Warning
         )
@@ -902,5 +1010,9 @@ $appointmentButton.Add_Click({
 [void]$form.ShowDialog()
 $form.Dispose()
 $Script:DatePickerFont.Dispose()
+if ($null -ne $applicationIcon)
+{
+    $applicationIcon.Dispose()
+}
 #endregion
 

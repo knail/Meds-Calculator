@@ -21,9 +21,9 @@ This software is free to use and is provided **"AS IS"**, without warranties of 
 - Estimate remaining quantity and the last day covered by each fill.
 - Choose a shared spot-check date and see every medication's remaining supply on that date.
 - View a monthly calendar with each medication's remaining quantity shown in each day's cell.
-- Create one `.ics` file containing a separate refill appointment for each medication.
-- Use a light gray interface with deep teal accents. Calendar statuses use green for available supply, red for depleted supply, and gray before the first fill date.
-- Use a modern system font when available, with a fallback for other Windows installations.
+- Create one `.ics` file per refill date, combining medications that share the date in one appointment.
+- Use a light gray interface with amber banners and a highlighted calendar button. Calendar entries use green for available supply, red for depleted supply, and gray before the first fill date.
+- Use the Windows Segoe UI font and subtly tinted input fields for readability.
 
 ## Requirements
 
@@ -42,6 +42,36 @@ Open PowerShell in the folder containing the script and run:
 
 The script opens the **Medication Supply Calculator** window.
 
+## Portable Windows EXE
+
+The calculator can also be packaged as a portable EXE using
+[PS2EXE](https://github.com/MScholtes/PS2EXE). The EXE contains the PowerShell
+script and runs it using Windows PowerShell and .NET Framework; it is not a
+native Rust application. The target workstation needs Windows PowerShell 5.1,
+.NET Framework 4.x, and an interactive desktop, but does not need PS2EXE.
+Copy `Meds-Calculator.exe` to the workstation and double-click it to launch.
+No installer or administrator privileges are required by the application.
+
+To build the EXE, open Windows PowerShell 5.1 in the project folder and run:
+
+```powershell
+Install-Module -Name ps2exe -RequiredVersion 1.0.18 -Scope CurrentUser
+Import-Module ps2exe -RequiredVersion 1.0.18
+Invoke-PS2EXE -InputFile .\Meds-Calculator.ps1 -OutputFile .\Meds-Calculator.exe `
+    -IconFile .\Meds-Calculator.ico -NoConsole -STA -Title 'Medication Supply Calculator' `
+    -Product 'Medication Supply Calculator' -Version '1.0.0.0'
+```
+
+Installing PS2EXE requires internet access and may prompt for repository trust.
+Rebuild the EXE after changing the script. An SSL certificate is not needed to
+build or run it. The resulting EXE is unsigned, so Windows SmartScreen,
+antivirus, or organizational application-control policies may warn about or
+block it. A code-signing certificate is separate from an SSL certificate; check
+with your administrator if workplace policy requires signed software.
+If an older icon appears, check that the desktop copy or shortcut points to
+the updated EXE. Windows may cache icons; refreshing Explorer or copying the
+EXE under a new filename can help.
+
 ## Enter medication details
 
 1. Select the number of medications to track, from 1 to 10.
@@ -50,10 +80,19 @@ The script opens the **Medication Supply Calculator** window.
 4. Choose the schedule:
    - **Daily:** enter 1–4 doses per day.
    - **Weekly:** the calculator uses one dose every seven days, starting on the fill-date weekday. The daily dose control is set to one and disabled.
-5. Set the shared **Spot check date** and, if you plan to export appointments, the shared **Appointment time**. The appointment time defaults to 9:00 AM.
-6. Select **Calculate all medications** to display the remaining quantity and refill date for each entry.
+5. Set the shared **Spot check date**.
+6. Select **Calculate All Medications** to display the remaining quantity and refill date for each entry.
+
+The results table shows each medication name, its quantity on the selected
+spot-check date, and its refill date. Scroll for additional medications or
+hover over a name to see it in full.
 
 Reducing the medication count hides later entries but keeps their values in the session. Increasing the count again restores them.
+
+To copy Medication 1's fill date to the other currently displayed medications,
+select **Copy Med 1 Fill Date to All**. This is a one-time copy: later changes
+or newly added medications are not automatically synchronized, and hidden
+entries are unchanged. Existing results are recalculated after the copy.
 
 ## How supply estimates work
 
@@ -81,26 +120,39 @@ For both schedules, if the spot-check date is before the fill date, the result i
 
 ## Availability calendar
 
-Select **View availability calendar** to open the month containing the shared spot-check date. Use **Previous** and **Next** to navigate.
+Select **View Availability Calendar** to open the month containing the shared spot-check date. Use **Previous** and **Next** to navigate.
 
-- **Green:** at least one medication that has been filled still has supply.
-- **Red:** at least one medication has been filled, and all filled supplies are depleted.
-- **Gray:** no medication has reached its fill date yet.
+- **Green:** this medication has supply.
+- **Red:** this medication's supply is depleted.
+- **Gray:** this medication has not reached its fill date.
 
 Each day cell lists every medication as `Name | remaining quantity`. A medication that has not reached its fill date is labeled **Not filled**; a depleted supply shows `0`. The shared spot-check date is outlined, and its values are measured at the start of that date. Larger calendar text may leave less room for entries; hover over a day to see its complete list if they do not all fit in the cell.
 
 ## Create refill appointments
 
-Select **Create refill appointments (.ics)** to create one combined calendar file:
+In **Create Refill Appointments**, choose the appointment time and enter how
+many days before each refill date to schedule it. Use `0` for the refill date
+itself. The default time is 9:00 AM. Select **Create Refill Appointments (.ics)**
+and choose a folder:
 
-- Each configured medication receives its own appointment on its calculated refill date.
+- One `.ics` file is created for each distinct refill date. Medications with the same refill date are combined in one appointment, with all their names in its title.
+- Each appointment occurs on its calculated refill date or the selected number of days before it.
 - Each appointment lasts one hour and uses the shared appointment time.
-- Each appointment includes a reminder one day before it starts.
-- The suggested filename includes the medication names; unsafe filename characters are replaced, and long names are shortened.
-- The save dialog starts in Documents when that folder is available.
-- After saving, the script attempts to open the file with the system's default `.ics` application. Outlook can import or open the file when it is configured as the calendar handler.
+- Each appointment includes an alert one day before the appointment, even when the appointment is scheduled before the refill date.
+- Each event's description includes the actual refill date.
+- Filenames include the refill date. Existing files are not overwritten; a numeric suffix is added when needed.
+- The folder picker starts in Documents when that folder is available.
+- After saving, the script attempts to open each file with the system's default `.ics` application. Outlook can import or open the files when it is configured as the calendar handler.
 
-The appointment time is interpreted in the computer's local time zone and converted for the calendar file. The script reports an error if the selected time does not exist on a refill date because of a daylight-saving transition.
+The appointment time is interpreted in the computer's local time zone and converted for the calendar file. The script reports an error if the selected time does not exist on an appointment date because of a daylight-saving transition, or if the offset would produce an invalid date.
+
+## Tests
+
+Run the focused calendar-status and appointment-generation tests in Windows PowerShell:
+
+```powershell
+.\tests\Meds-Calculator.Tests.ps1
+```
 
 ## Calculation limits
 
