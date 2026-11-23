@@ -55,11 +55,10 @@ The script opens the **Medication Supply Calculator** window.
 
 ## Portable Windows EXE
 
-The calculator can also be packaged as a portable EXE using
-[PS2EXE](https://github.com/MScholtes/PS2EXE). The EXE contains the PowerShell
+The EXE contains the PowerShell
 script and runs it using Windows PowerShell and .NET Framework. 
 The target workstation needs Windows PowerShell 5.1,
-.NET Framework 4.x, and an interactive desktop, but does not need PS2EXE.
+.NET Framework 4.x, and an interactive desktop.
 Copy `Meds-Calculator.exe` to the workstation and double-click it to launch.
 No installer or administrator privileges are required by the application.
 
