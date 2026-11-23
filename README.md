@@ -22,8 +22,7 @@ This software is free to use and is provided **"AS IS"**, without warranties of 
 - Choose a shared spot-check date and see every medication's remaining supply on that date.
 - View a monthly calendar with each medication's remaining quantity shown in each day's cell.
 - Create one `.ics` file per refill date, combining medications that share the date in one appointment.
-- Use a light gray interface with amber banners and a highlighted calendar button. Calendar entries use green for available supply, red for depleted supply, and gray before the first fill date.
-- Use the Windows Segoe UI font and subtly tinted input fields for readability.
+- Calendar entries use green for available supply, red for depleted supply, and gray before the first fill date.
 
 ## Screenshots
 
