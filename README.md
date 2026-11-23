@@ -157,13 +157,6 @@ and choose a folder:
 
 The appointment time is interpreted in the computer's local time zone and converted for the calendar file. The script reports an error if the selected time does not exist on an appointment date because of a daylight-saving transition, or if the offset would produce an invalid date.
 
-## Tests
-
-Run the focused calendar-status and appointment-generation tests in Windows PowerShell:
-
-```powershell
-.\tests\Meds-Calculator.Tests.ps1
-```
 
 ## Calculation limits
 
