@@ -25,6 +25,18 @@ This software is free to use and is provided **"AS IS"**, without warranties of 
 - Use a light gray interface with amber banners and a highlighted calendar button. Calendar entries use green for available supply, red for depleted supply, and gray before the first fill date.
 - Use the Windows Segoe UI font and subtly tinted input fields for readability.
 
+## Screenshots
+
+These screenshots use fictional medication names and example dates.
+
+### Calculator and results
+
+![Calculator with two example medications and their results](docs/screenshots/calculator.png)
+
+### Availability calendar
+
+![Availability calendar showing example medication supplies](docs/screenshots/availability-calendar.png)
+
 ## Requirements
 
 - Windows with an interactive desktop.
