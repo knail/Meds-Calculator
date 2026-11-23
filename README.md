@@ -63,25 +63,6 @@ The target workstation needs Windows PowerShell 5.1,
 Copy `Meds-Calculator.exe` to the workstation and double-click it to launch.
 No installer or administrator privileges are required by the application.
 
-To build the EXE, open Windows PowerShell 5.1 in the project folder and run:
-
-```powershell
-Install-Module -Name ps2exe -RequiredVersion 1.0.18 -Scope CurrentUser
-Import-Module ps2exe -RequiredVersion 1.0.18
-Invoke-PS2EXE -InputFile .\Meds-Calculator.ps1 -OutputFile .\Meds-Calculator.exe `
-    -IconFile .\Meds-Calculator.ico -NoConsole -STA -Title 'Medication Supply Calculator' `
-    -Product 'Medication Supply Calculator' -Version '1.0.0.0'
-```
-
-Installing PS2EXE requires internet access and may prompt for repository trust.
-Rebuild the EXE after changing the script. An SSL certificate is not needed to
-build or run it. The resulting EXE is unsigned, so Windows SmartScreen,
-antivirus, or organizational application-control policies may warn about or
-block it. A code-signing certificate is separate from an SSL certificate; check
-with your administrator if workplace policy requires signed software.
-If an older icon appears, check that the desktop copy or shortcut points to
-the updated EXE. Windows may cache icons; refreshing Explorer or copying the
-EXE under a new filename can help.
 
 ## Enter medication details
 
